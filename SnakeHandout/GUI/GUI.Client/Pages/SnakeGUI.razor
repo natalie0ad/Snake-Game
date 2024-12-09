@@ -1,0 +1,721 @@
+﻿@* /// <authors> [Natalie DeSimone and Rishabh Saini] </authors>
+/// <date> [November 24, 2024] </date> *@
+
+@page "/snake"
+@rendermode InteractiveServer
+@using Blazor.Extensions
+@using Blazor.Extensions.Canvas
+@using Blazor.Extensions.Canvas.Canvas2D
+@using System.Numerics
+@using System.Diagnostics
+@using System.Text.Json
+@using GUI.Client.Controllers
+@using GUI.Client.Models;
+@inject IJSRuntime JsRuntime;
+
+<PageTitle> Snake </PageTitle>
+<img @ref="backgroundImage" id="bg" src="images/Background.png" alt="image" style="display:none;" />
+<img @ref="spaceshipImage" id="spaceship" src="images/spaceship.png" alt="image" style="display:none;" />
+<img @ref="wallImage" id="wall" src="images/WallSprite.png" alt="image" style="display: none;" />
+<img @ref="appleImage" id="apple" src="images/pngtree-fresh-apple-fruit-red-png-image_10203073.png" alt="image" style="display: none;" />
+<img @ref="starImage" id="apple" src="images/star.png" alt="image" style="display: none;" />
+<img @ref="snakeHeadUp" id="snake" src="images/snakeHeadUp.png" alt="image" style="display: none;" />
+<img @ref="snakeHeadDown" id="snake" src="images/snakeHeadDown.png" alt="image" style="display: none;" />
+<img @ref="snakeHeadRight" id="snake" src="images/snakeHeadRight.png" alt="image" style="display: none;" />
+<img @ref="snakeHeadLeft" id="snake" src="images/snakeHeadLeft.png" alt="image" style="display: none;" />
+<img @ref="alienHeadUp" id="alien" src="images/alienHeadUp.png" alt="image" style="display: none;" />
+<img @ref="alienHeadDown" id="alien" src="images/alienHeadDown.png" alt="image" style="display: none;" />
+<img @ref="alienHeadRight" id="alien" src="images/alienHeadRight.png" alt="image" style="display: none;" />
+<img @ref="alienHeadLeft" id="alien" src="images/alienHeadLeft.png" alt="image" style="display: none;" />
+<img @ref="spaceImage" id="space" src="images/space background.jpg" alt="image" style="display: none;" />
+<img @ref="forestImage" id="forest" src="images/forestBg.png" alt="image" style="display: none;" />
+
+@* explosion images *@
+<img @ref="explosion1" id="explosion" src="images/explosion1.png" alt="image" style="display: none;" />
+<img @ref="explosion2" id="explosion" src="images/explosion2.png" alt="image" style="display: none;" />
+<img @ref="explosion3" id="explosion" src="images/explosion3.png" alt="image" style="display: none;" />
+<img @ref="explosion4" id="explosion" src="images/explosion4.png" alt="image" style="display: none;" />
+<img @ref="explosion5" id="explosion" src="images/explosion5.png" alt="image" style="display: none;" />
+<img @ref="explosion6" id="explosion" src="images/explosion6.png" alt="image" style="display: none;" />
+<img @ref="explosion7" id="explosion" src="images/explosion7.png" alt="image" style="display: none;" />
+<img @ref="explosion8" id="explosion" src="images/explosion8.png" alt="image" style="display: none;" />
+<img @ref="explosion9" id="explosion" src="images/explosion9.png" alt="image" style="display: none;" />
+<img @ref="explosion10" id="explosion" src="images/explosion10.png" alt="image" style="display: none;" />
+<img @ref="explosion11" id="explosion" src="images/explosion11.png" alt="image" style="display: none;" />
+<img @ref="explosion12" id="explosion" src="images/explosion12.png" alt="image" style="display: none;" />
+
+<span>
+	<label> Number of Players: </label> <label>@TheWorld.snakes.Count</label>
+</span>
+
+<div>
+	Enter host:<input @bind="host" disabled = "@controller.IsConnected"/>
+	Enter port:<input @bind="port" disabled="@controller.IsConnected" />
+	Enter Username: <input @bind="username" disabled="@controller.IsConnected" />
+	@if (controller.IsConnected)
+	{
+		<button class="btn btn-primary" @onclick="Disconnect">Disconnect</button>
+	}
+	else
+	{
+		<button class="btn btn-primary" @onclick="Connect">Connect</button>
+	}
+
+	@if (IsSpaceMode)
+	{
+		<button class="btn btn-primary" @onclick="ForestMode">Forest Mode</button>
+	}
+
+	else
+	{
+		<button class="btn btn-primary" @onclick="SpaceMode">Space Mode</button>
+	}
+
+</div>
+
+<div class="overlay" style="background-color:red;@(ShowError ? "display: block;" : "display: none;")">
+	<div class="error-message">
+		@ErrorMessage
+		<br>
+		<button style="background-color: darkred; color: white" @onclick="ClosePopUp">Dismiss</button>
+	</div>
+</div>
+
+<div id="snakeCanvas" style="position: fixed; width: 100%; height: 100%">
+	<BECanvas Width="1000" Height="1000" @ref="canvasReference"></BECanvas>
+</div>
+
+@code
+{
+	/// <summary>
+	/// C# reference for the canvas.
+	/// </summary>
+	private BECanvasComponent canvasReference = null!;
+
+	/// <summary>
+	/// The object represent the canvas' context.
+	/// </summary>
+	private Canvas2DContext context = null!;
+
+	/// <summary>
+	/// Reference for the JavaScript file.
+	/// </summary>
+	private IJSObjectReference jsModule = null!;
+
+	/// <summary>
+	/// String representing the server address
+	/// </summary>
+	private static string host = "localhost";
+
+	/// <summary>
+	/// Integer representing the port.
+	/// </summary
+	private static int port = 11000;
+
+	/// <summary>
+	/// The NetworkController representing the controller.
+	/// </summary>
+	private NetworkController controller = new();
+
+	/// <summary>
+	/// The Integer represeting the player ID.
+	/// </summary>
+	private int PlayerID;
+
+	/// <summary>
+	/// The list representing the walls of the world.
+	/// </summary>
+	private List<Wall> walls = new();
+
+	/// <summary>
+	/// The World object representing the game world.
+	/// </summary>
+	private World TheWorld = new World();
+
+	/// <summary>
+	/// The Integer representing the size of the world
+	/// </summary>
+	private int WorldSize;
+
+	/// <summary>
+	/// C# reference to the html element for the background image
+	/// </summary>
+	private ElementReference backgroundImage;
+
+	/// <summary>
+	/// C# reference to the html element for the spaceship image
+	/// </summary>
+	private ElementReference spaceshipImage;
+	/// <summary>
+	/// C# reference to the html element for the wall image
+	/// </summary>
+	private ElementReference wallImage;
+
+	/// <summary>
+	/// C# reference to the html element for the apple image
+	/// </summary>
+	private ElementReference appleImage;
+
+	/// <summary>
+	/// C# reference to the html element for the star image
+	/// </summary>
+	private ElementReference starImage;
+
+	/// <summary>
+	/// C# reference to the html element for the snake head up image
+	/// </summary>
+	private ElementReference snakeHeadUp;
+
+	/// <summary>
+	/// C# reference to the html element for the snake head down image
+	/// </summary>
+	private ElementReference snakeHeadDown;
+
+	/// <summary>
+	/// C# reference to the html element for the snake head right image
+	/// </summary>
+	private ElementReference snakeHeadRight;
+
+	/// <summary>
+	/// C# reference to the html element for the snake head left image
+	/// </summary>
+	private ElementReference snakeHeadLeft;
+
+	/// <summary>
+	/// C# reference to the html element for the alien head up image
+	/// </summary>
+	private ElementReference alienHeadUp;
+
+	/// <summary>
+	/// C# reference to the html element for the alien head down image
+	/// </summary>
+	private ElementReference alienHeadDown;
+
+	/// <summary>
+	/// C# reference to the html element for the alien head right image
+	/// </summary>
+	private ElementReference alienHeadRight;
+
+	/// <summary>
+	/// C# reference to the html element for the alien head left image
+	/// </summary>
+	private ElementReference alienHeadLeft;
+
+	/// <summary>
+	/// C# reference to the html element for the forest image
+	/// </summary>
+	private ElementReference forestImage;
+
+	/// <summary>
+	/// C# reference to the html element for the space image
+	/// </summary>
+	private ElementReference spaceImage;
+
+
+	/// <summary>
+	/// C# reference to the html element for the 1st explosion image
+	/// </summary>
+	private ElementReference explosion1;
+
+	/// <summary>
+	/// C# reference to the html element for the 2nd explosion image
+	/// </summary>
+	private ElementReference explosion2;
+
+	/// <summary>
+	/// C# reference to the html element for the 3rd explosion image
+	/// </summary>
+	private ElementReference explosion3;
+
+	/// <summary>
+	/// C# reference to the html element for the 4th explosion image
+	/// </summary>
+	private ElementReference explosion4;
+
+	/// <summary>
+	/// C# reference to the html element for the 5th explosion image
+	/// </summary>
+	private ElementReference explosion5;
+
+	/// <summary>
+	/// C# reference to the html element for the 6th explosion image
+	/// </summary>
+	private ElementReference explosion6;
+
+	/// <summary>
+	/// C# reference to the html element for the 7th explosion image
+	/// </summary>
+	private ElementReference explosion7;
+
+	/// <summary>
+	/// C# reference to the html element for the 8th explosion image
+	/// </summary>
+	private ElementReference explosion8;
+
+	/// <summary>
+	/// C# reference to the html element for the 9th explosion image
+	/// </summary>
+	private ElementReference explosion9;
+
+	/// <summary>
+	/// C# reference to the html element for the 10th explosion image
+	/// </summary>
+	private ElementReference explosion10;
+
+	/// <summary>
+	/// C# reference to the html element for the 11th explosion image
+	/// </summary>
+	private ElementReference explosion11;
+
+	/// <summary>
+	/// C# reference to the html element for the 12th explosion image
+	/// </summary>
+	private ElementReference explosion12;
+
+
+	/// <summary>
+	/// The string representing the username.
+	/// </summary>
+	private string username = string.Empty;
+
+	/// <summary>
+	/// The bool value which is true when the game is in space mode, false otherwise.
+	/// </summary>
+	private bool IsSpaceMode;
+
+	/// <summary>
+	/// Width of the display canvas
+	/// </summary>
+	private const int ViewWidth = 1000;
+
+	/// <summary>
+	/// Height of the display canvas
+	/// </summary>
+	private const int ViewHeight = 1000;
+
+	/// <summary>
+	/// The bool value which is true when the error pop up is being shown, false otherwise.
+	/// </summary>
+	private bool ShowError;
+
+	/// <summary>
+	/// The strinf representing the error message in the error pop up
+	/// </summary>
+	private string ErrorMessage = string.Empty;
+
+
+	/// <summary>
+	/// Dictionary that maps every snake to an int representing an explosion 
+	/// counter, and a bool representing whether the explosion has been 
+	/// drawn or not
+	/// </summary>
+	private Dictionary<int, Tuple<int, bool>> explosionForSnakes = new();
+
+	/// <summary>
+	///	This method runs when the game page is first open (runs at first render).
+	///	It draws the forest mode's background as default.
+	/// </summary>
+	/// <param name="firstRender"> bool value representing whether the page is on its first render. </param>
+	/// <returns> A Task that representing the state after first render. </returns>
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (firstRender)
+		{
+			jsModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./Pages/SnakeGUI.razor.js");
+			context = await canvasReference.CreateCanvas2DAsync();
+			await JsRuntime.InvokeAsync<object>("initRenderJS", DotNetObjectReference.Create(this));
+
+
+			await context.DrawImageAsync(forestImage, 0, 0, 1000, 1000);
+		}
+	}
+
+	/// <summary>
+	/// Starts an infinite while loop that updates the game's frame every 20
+	/// milliseconds.
+	/// </summary>
+	private async void StartGameLoop()
+	{
+		//count the numebr of snakes before the while loop
+		int numberOfSnakes = TheWorld.snakes.Count;
+
+		//lock to prevent potential race condition
+		lock (TheWorld)
+		{
+			//have all snakes present in the game have their own tuple.
+			foreach (int snakeID in TheWorld.snakes.Keys)
+			{
+				explosionForSnakes.TryAdd(snakeID, new Tuple<int, bool>(1, false));
+			}
+		}
+		
+		while (true)
+		{
+			//if the player disconnects, srop drawinga and just display the non-playable
+			//background image.
+			if (!controller.IsConnected)
+			{
+				if (IsSpaceMode)
+					await context.DrawImageAsync(spaceImage, 0, 0, 1000, 1000);
+				else
+					await context.DrawImageAsync(forestImage, 0, 0, 1000, 1000);
+
+				StateHasChanged();
+				break;
+			}
+
+			//if the number of snakes in the world changes at any point, update the explosions dictionary.
+			if(numberOfSnakes != TheWorld.snakes.Count)
+			{
+				explosionForSnakes.Clear();
+				lock (TheWorld)
+				{
+					foreach (int snakeID in TheWorld.snakes.Keys)
+					{
+						explosionForSnakes.TryAdd(snakeID, new Tuple<int, bool>(1, false));
+					}
+				}
+				numberOfSnakes = TheWorld.snakes.Count;
+			}
+
+			Thread.Sleep(20);
+			if (IsSpaceMode)
+				await DrawFrame(spaceshipImage, spaceImage, starImage);
+
+			else
+				await DrawFrame(backgroundImage, forestImage, appleImage);
+		}
+	}
+
+	/// <summary>
+	/// Handles when a directional key is pressed
+	/// </summary>
+	/// <param name="key"> string representing the key that was pressed </param>
+	[JSInvokable]
+	public void HandleKeyPress(string key)
+	{
+		if (controller.IsConnected)
+		{
+			switch (key.ToLower())
+			{
+				case "w":
+					controller.Up();
+					break;
+				case "s":
+					controller.Down();
+					break;
+				case "a":
+					controller.Left();
+					break;
+				case "d":
+					controller.Right();
+					break;
+			}
+		}
+	}
+	/// <summary>
+	/// Attempts to connected the client to the server.
+	/// </summary>
+	private void Connect()
+	{
+		if (username == string.Empty)
+		{
+			ShowError = true;
+			ErrorMessage = "Must enter name.";
+			return;
+		}
+		else if (username.Length > 16)
+		{
+			ShowError = true;
+			ErrorMessage = "Name cannot be longer than 16 characters.";
+			return;
+		}
+
+		try
+		{
+			controller.Handshake(host, port, username, ref PlayerID, ref WorldSize, walls);
+		}
+		catch (Exception)
+		{
+			ShowError = true;
+			ErrorMessage = "Failed to connect.";
+			return;
+		}
+
+		new Thread(() => controller.NetworkLoop(TheWorld)).Start();
+
+		StartGameLoop();
+	}
+
+	/// <summary>
+	/// Disconnects client
+	/// </summary>
+	private void Disconnect()
+	{
+		controller.Disconnect();
+		explosionForSnakes.Clear();
+		TheWorld.snakes.Clear();
+		TheWorld.powerups.Clear();
+	}
+	/// <summary>
+	/// Draws one frame of the game
+	/// </summary>
+	/// <returns>A Task representing the the updated frame</returns>
+	private async Task DrawFrame(ElementReference worldImage, ElementReference backgroundImage, ElementReference powerupImage)
+	{
+		//return if the snakes dictionary does not contain the user's dictionary yet.
+		if (!TheWorld.snakes.ContainsKey(PlayerID))
+			return;
+
+		// batch the drawing calls for better performance
+		await context.BeginBatchAsync();
+		await context.BeginPathAsync();
+		await context.RectAsync(0, 0, ViewWidth, ViewHeight);
+		await context.ClipAsync();
+
+		await context.SaveAsync();
+
+		await context.DrawImageAsync(backgroundImage, 0, 0, WorldSize, WorldSize);
+		// Center on origin, move to center of view port
+		await context.TranslateAsync(ViewWidth / 2, ViewHeight / 2);
+
+		Snake snake = snake = TheWorld.snakes[PlayerID];
+		await context.TranslateAsync(- snake.body.Last().X, -snake.body.Last().Y);
+		await context.DrawImageAsync(worldImage, -WorldSize / 2, -WorldSize / 2, WorldSize, WorldSize);
+
+
+		//draws all the walls
+		foreach (Wall wall in walls)
+		{
+
+			if (wall.IsXAligned())
+			{
+				int min = Math.Min(wall.p1.X, wall.p2.X);
+				int max = Math.Max(wall.p1.X, wall.p2.X);
+				for (int i = min; i <= max; i += 50)
+				{
+					await context.DrawImageAsync(wallImage, i - 25, wall.p1.Y - 25, 50, 50);
+				}
+			}
+
+			else if (wall.IsYAligned())
+			{
+				int min = Math.Min(wall.p1.Y, wall.p2.Y);
+				int max = Math.Max(wall.p1.Y, wall.p2.Y);
+				for (int i = min; i <= max; i += 50)
+				{
+					await context.DrawImageAsync(wallImage, wall.p1.X - 25, i - 25, 50, 50);
+				}
+			}
+		}
+
+		World worldCopy;
+		lock (TheWorld)
+		{
+			worldCopy = new(TheWorld);
+		}
+		foreach (Snake s in worldCopy.snakes.Values)
+		{
+
+			if (s.alive)
+			{
+				// if the snake is alive, then set the bool value in the tuple in the explosion dictionary to false,
+				// so that we can re draw the explosion when needed.
+				explosionForSnakes[s.snake] = new Tuple<int, bool>(1, false);
+
+				await context.SetLineWidthAsync(10);				
+
+				//color snakes 8 diffferent colors
+				if (s.snake % 8 == 0)
+					await context.SetStrokeStyleAsync($"rgb(0, 0, 255)");
+				else if (s.snake % 8 == 1)
+					await context.SetStrokeStyleAsync($"rgb( 205, 300, 0 )");
+				else if (s.snake % 8 == 2)
+					await context.SetStrokeStyleAsync($"rgb( 100, 100, 100 )");
+				else if (s.snake % 8 == 3)
+					await context.SetStrokeStyleAsync($"rgb( 200, 0, 0 )");
+				else if (s.snake % 8 == 4)
+					await context.SetStrokeStyleAsync($"rgb( 30, 300, 100 )");
+				else if (s.snake % 8 == 5)
+					await context.SetStrokeStyleAsync($"rgb( 130,  200, 0 )");
+				else if (s.snake % 8 == 6)
+					await context.SetStrokeStyleAsync($"rgb( 0, 100, 200 )");
+				else if (s.snake % 8 == 7)
+					await context.SetStrokeStyleAsync($"rgb( 30, 150, 200 )");
+
+				await context.BeginPathAsync();
+				foreach (Point2D point in s.body)
+				{
+					await context.LineToAsync(point.X, point.Y);
+				}
+				await context.StrokeAsync();
+				await context.SetFillStyleAsync("white");
+				await context.SetFontAsync("16px Arial");
+				await context.FillTextAsync($"{s.name} ({s.score})", s.body.Last().X + 10, s.body.Last().Y - 10);
+
+				if (IsSpaceMode)
+				{
+					await DrawSnakeHead(s, alienHeadDown, alienHeadUp, alienHeadRight, alienHeadLeft);
+				}
+				else
+				{
+					await DrawSnakeHead(s, snakeHeadDown, snakeHeadUp, snakeHeadRight, snakeHeadLeft);
+				}
+			}
+
+			//if snake isn't alive draw the explosion.
+			else
+			{
+				if(explosionForSnakes.ContainsKey(s.snake)) 
+				{
+					//there are 12 frames for the explosion, so if int value in the tuple from the explosion dictionary is
+					//12 it means we have sucessfully drawn the whole explosion. Set it back to one so that we draw again.
+					if (explosionForSnakes[s.snake].Item1 == 12)
+					{
+						explosionForSnakes[s.snake] = new Tuple<int, bool>(1, true);
+					}
+
+					if (!explosionForSnakes[s.snake].Item2)
+					{
+						int ExplosionCount = explosionForSnakes[s.snake].Item1;
+
+						//increment explosion count so that we can draw the next frame when the loop runs again
+						explosionForSnakes[s.snake] = new Tuple<int, bool>(++ExplosionCount, false);
+						await DrawExplosion(s, s.body);
+					}
+				}
+			}
+		}
+
+		/// draws powerups
+		foreach (Powerup p in worldCopy.powerups.Values)
+		{
+			await context.DrawImageAsync(powerupImage, p.loc.X - 8, p.loc.Y - 8, 16, 16);
+		}
+
+		await context.RestoreAsync();
+		await context.EndBatchAsync();
+		StateHasChanged();
+	}
+
+	/// <summary>
+	/// Draws added snake head in correct direction
+	/// </summary>
+	private async Task DrawSnakeHead(Snake s, ElementReference down, ElementReference up, ElementReference right, ElementReference left)
+	{
+		if (s.dir.Y > 0)
+			await context.DrawImageAsync(down, s.body.Last().X - 20, s.body.Last().Y - 20, 40, 40);
+
+		else if (s.dir.Y < 0)
+			await context.DrawImageAsync(up, s.body.Last().X - 20, s.body.Last().Y - 20, 40, 40);
+
+		else if (s.dir.X > 0)
+			await context.DrawImageAsync(right, s.body.Last().X - 20, s.body.Last().Y - 20, 40, 40);
+
+		else if (s.dir.X < 0)
+			await context.DrawImageAsync(left, s.body.Last().X - 20, s.body.Last().Y - 20, 40, 40);
+	}
+
+	/// <summary>
+	/// Creates explosion from series of images.
+	/// </summary>
+	private async Task DrawExplosion(Snake s, List<Point2D> body)
+	{
+		int explosionCount = explosionForSnakes[s.snake].Item1;
+		
+		//through the followinf if-else branches, draw the explosion frame that the snake is currently on.
+		if (explosionCount == 1)
+		{
+			await context.DrawImageAsync(explosion1, body.Last().X - 50, body.Last().Y - 50, 100, 100);
+		}
+		else if (explosionCount == 2)
+		{
+			await context.DrawImageAsync(explosion2, body.Last().X - 50, body.Last().Y - 50, 100, 100);
+		}
+		else if (explosionCount == 3)
+		{
+			await context.DrawImageAsync(explosion3, body.Last().X - 50, body.Last().Y - 50, 100, 100);
+		}
+		else if (explosionCount == 4)
+		{
+			await context.DrawImageAsync(explosion4, body.Last().X - 50, body.Last().Y - 50, 100, 100);
+		}
+		else if (explosionCount  == 5)
+		{
+			await context.DrawImageAsync(explosion5, body.Last().X - 50, body.Last().Y - 50, 100, 100);
+		}
+		else if (explosionCount == 6)
+		{
+			await context.DrawImageAsync(explosion6, body.Last().X - 50, body.Last().Y - 50, 100, 100);
+		}
+		else if (explosionCount == 7)
+		{
+			await context.DrawImageAsync(explosion7, body.Last().X - 50, body.Last().Y - 50, 100, 100);
+		}
+		else if (explosionCount == 8)
+		{
+			await context.DrawImageAsync(explosion8, body.Last().X - 50, body.Last().Y - 50, 100, 100);
+		}
+		else if (explosionCount == 9)
+		{
+			await context.DrawImageAsync(explosion9, body.Last().X - 50, body.Last().Y - 50, 100, 100);
+		}
+		else if (explosionCount == 10)
+		{
+			await context.DrawImageAsync(explosion10, body.Last().X - 50, body.Last().Y - 50, 100, 100);
+		}
+		else if (explosionCount == 11)
+		{
+			await context.DrawImageAsync(explosion11, body.Last().X - 50, body.Last().Y - 50, 100, 100);
+		}
+		else if (explosionCount == 12)
+		{
+			await context.DrawImageAsync(explosion12, body.Last().X - 50, body.Last().Y - 50, 100, 100);
+		}
+	}
+
+	/// <summary>
+	/// Closes error popup
+	/// </summary>
+	private void ClosePopUp()
+	{
+		ShowError = false;
+	}
+
+	/// <summary>
+	/// Enables drawing for space mode
+	/// </summary>
+	private async Task SpaceMode()
+	{
+		IsSpaceMode = true;
+		await context.DrawImageAsync(spaceImage, 0, 0, 1000, 1000);
+	}
+
+	/// <summary>
+	/// Enables drawing for space mode
+	/// </summary>
+	private async Task ForestMode()
+	{
+		IsSpaceMode = false;
+		await context.DrawImageAsync(forestImage, 0, 0, 1000, 1000);
+	}
+
+}
+
+<style>
+	.overlay {
+		position: fixed; /* Keeps it centered on the viewport */
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%); /* Centers it */
+		width: 300px; /* Adjust as needed */
+		height: 200px; /* Adjust as needed */
+		padding: 20px;
+		border: 3px solid black;
+		z-index: 1000; /* Ensures it stays on top */
+		text-align: center;
+		font-size: 1.5em; /* Increase font size */
+	}
+</style>
+
+
