@@ -1,5 +1,5 @@
 # Snake Game
-This game was developed for CS 3500: Software Practice 1
+This game was developed for CS 3500: Software Practice 1, class focused on software engineering
 - This game uses client/server architecture.
 - In this assignment, we implemented the client side of the game.
 
@@ -7,13 +7,17 @@ This game was developed for CS 3500: Software Practice 1
 - The goal of the game is to control the snake by consuming powerups to increase its length by a fixed amount.
 - The snake dies if it hits one of the walls present in the game's world, if it hits another snake present in the game's world, or if it hits itself.
 - After dying, the snake respawns after a certain amount of time to a random spot in the world.
+- There is also a SQL database that keeps track of Games, the snakes that played in a game, and each snakes highscore
+
+## DataBase
+- The database uses MySQL to record Games and Players and update webserver in real time 
+- The Games have a game ID, a start time and an endtime
+- Players are connected to a game through the Game ID, Players have a ID, name, max score, enter time, and leave time 
+- To connect to web server enter localhost as the server address in a web browser page(The database is inaccessible to those not affiliated with University of Utah)
 
 ## Developers
-- Rishabh Saini
 - Natalie DeSimone
-
-## Team
-Delegate_Duo
+- Rishabh Saini
 
 ## How to play
 This is a client/server game, so the first step of the game is to connect to the server.
